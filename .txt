@@ -1,0 +1,119 @@
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+const { Player } = require('@discord-player');
+const { SpotifyExtractor } = require('@discord-player/extractor');
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions
+    ]
+});
+
+const prefix = '~';
+const leveling = {};
+const player = new Player(client);
+
+// Register Spotify extractor
+player.use('spotify', SpotifyExtractor);
+
+client.once('ready', () => {
+    console.log('Bot is online!');
+});
+
+// Welcome message
+client.on('guildMemberAdd', member => {
+    const welcomeChannel = member.guild.channels.cache.find(channel => channel.name === "welcome");
+    if (welcomeChannel) {
+        welcomeChannel.send(`Welcome to the server, ${member}! Feel free to introduce yourself.`);
+    }
+});
+
+// Handle incoming messages
+client.on('messageCreate', async message => {
+    if (message.author.bot || !message.content.startsWith(prefix)) return;
+
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
+    // Rules command
+    if (command === 'rules') {
+        const rulesMessage = `
+**Server Rules:**
+1. Be respectful to everyone.
+2. No spamming or excessive messaging.
+3. Use appropriate channels for your topics.
+4. No NSFW content.
+5. Follow Discord's Terms of Service.
+
+Please make sure to follow the rules to keep our community safe and enjoyable for everyone!
+        `;
+        message.channel.send(rulesMessage);
+    }
+
+    // Moderator commands (kick, ban, unban, timeout, clear)
+    // Same as provided in previous code examples...
+
+    // Music commands
+    if (command === 'play') {
+        if (!message.member.voice.channel) {
+            return message.reply('You need to be in a voice channel to play music!');
+        }
+
+        const query = args.join(' ');
+        if (!query) {
+            return message.reply('Please provide a song name or a Spotify/YouTube link!');
+        }
+
+        const queue = player.createQueue(message.guild, {
+            metadata: {
+                channel: message.channel
+            }
+        });
+
+        try {
+            await queue.connect(message.member.voice.channel);
+        } catch {
+            queue.destroy();
+            return message.reply('Could not join your voice channel!');
+        }
+
+        const track = await player.search(query, {
+            requestedBy: message.author
+        }).then(x => x.tracks[0]);
+
+        if (!track) return message.reply(`No results found for ${query}!`);
+
+        queue.addTrack(track);
+        if (!queue.playing) await queue.play();
+    } else if (command === 'stop') {
+        const queue = player.getQueue(message.guild.id);
+        if (!queue) return message.reply('There is no music playing!');
+
+        queue.destroy();
+        message.channel.send('Music stopped and queue cleared.');
+    } else if (command === 'addqueue') {
+        const query = args.join(' ');
+        if (!query) {
+            return message.reply('Please provide a song name or a Spotify/YouTube link to add to the queue!');
+        }
+
+        const queue = player.getQueue(message.guild.id);
+        if (!queue) return message.reply('There is no active music queue! Use `~play` to start the queue.');
+
+        const track = await player.search(query, {
+            requestedBy: message.author
+        }).then(x => x.tracks[0]);
+
+        if (!track) return message.reply(`No results found for ${query}!`);
+
+        queue.addTrack(track);
+        message.channel.send(`${track.title} has been added to the queue.`);
+    }
+
+    // Other commands (e.g., level, help, ping, support)
+    // Same as provided in previous code examples...
+});
+
